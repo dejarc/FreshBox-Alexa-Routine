@@ -29,10 +29,6 @@ var eventEmitter = new emitter.EventEmitter();
 var APP_ID = undefined; //replace with 'amzn1.echo-sdk-ams.app.[your-unique-value-here]';
 var personal_id = 0;
 AWS.config.update({
- region: "us-east-1",
- endpoint: "https://dynamodb.us-east-1.amazonaws.com",
- accessKeyId: "AKIAIL75O2Q6XBUATFSA",
- secretAccessKey: "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"
 });
 var docClient = new AWS.DynamoDB.DocumentClient();
 
