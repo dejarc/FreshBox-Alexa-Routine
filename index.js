@@ -2,11 +2,6 @@
 
 var AlexaSkill = require('./AlexaSkill');
 var AWS = require("aws-sdk");
-var emitter = require('events');
-var eventEmitter = new emitter.EventEmitter();
-
-var APP_ID = undefined; 
-var personal_id = 0;
 AWS.config.update({
   region: "us-east-1",
   endpoint: "https://dynamodb.us-east-1.amazonaws.com",
