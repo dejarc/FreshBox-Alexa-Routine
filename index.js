@@ -1,24 +1,3 @@
-/**
-    Copyright 2014-2015 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-
-    Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance with the License. A copy of the License is located at
-
-        http://aws.amazon.com/apache2.0/
-
-    or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
-*/
-
-/**
- * This sample shows how to create a Lambda function for handling Alexa Skill requests that:
- *
- * - Custom slot type: demonstrates using custom slot types to handle a finite set of known values
- *
- * Examples:
- * One-shot model:
- *  User: "Alexa, ask Minecraft Helper how to make paper."
- *  Alexa: "(reads back recipe for paper)"
- */
-
 'use strict';
 
 var AlexaSkill = require('./AlexaSkill');
@@ -26,9 +5,13 @@ var AWS = require("aws-sdk");
 var emitter = require('events');
 var eventEmitter = new emitter.EventEmitter();
 
-var APP_ID = undefined; //replace with 'amzn1.echo-sdk-ams.app.[your-unique-value-here]';
+var APP_ID = undefined; 
 var personal_id = 0;
 AWS.config.update({
+  region: "us-east-1",
+  endpoint: "https://dynamodb.us-east-1.amazonaws.com",
+  accessKeyId:"",//hidden
+  secretAccessKey:""//hidden
 });
 var docClient = new AWS.DynamoDB.DocumentClient();
 
