@@ -1,0 +1,58 @@
+{
+  "intents": [
+    {
+      "intent": "AllFoodsIntent"
+    },
+    {
+      "intent": "QuantityIntent",
+      "slots": [
+      {
+        "name" : "Item",
+        "type": "LIST_OF_ITEMS"
+      }, {
+        "name" : "Modifier",
+        "type": "MODIFIER"
+      }
+     ]
+    },
+    {
+      "intent": "RemoveIntent",
+      "slots": [
+      {
+        "name" : "Item",
+        "type": "LIST_OF_ITEMS"
+      }, {
+        "name" : "Number",
+        "type": "QUANTITY"
+      }, {
+        "name" : "Modifier",
+        "type": "MODIFIER"
+      }
+     ]
+    },
+    {
+      "intent": "AddIntent",
+      "slots": [
+      {
+        "name" : "Item",
+        "type": "LIST_OF_ITEMS"
+      }, {
+        "name" : "Number",
+        "type": "QUANTITY"
+      }, {
+        "name" : "Modifier",
+        "type": "MODIFIER"
+      }
+     ]
+    },
+   {
+      "intent": "AMAZON.HelpIntent"
+    },
+    {
+      "intent": "AMAZON.StopIntent"
+    },
+    {
+      "intent": "AMAZON.CancelIntent"
+    }
+  ]
+}
