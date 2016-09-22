@@ -1,38 +1,12 @@
-/**
-    Copyright 2014-2015 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-
-    Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance with the License. A copy of the License is located at
-
-        http://aws.amazon.com/apache2.0/
-
-    or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
-*/
-
-/**
- * This sample shows how to create a Lambda function for handling Alexa Skill requests that:
- *
- * - Custom slot type: demonstrates using custom slot types to handle a finite set of known values
- *
- * Examples:
- * One-shot model:
- *  User: "Alexa, ask Minecraft Helper how to make paper."
- *  Alexa: "(reads back recipe for paper)"
- */
-
 'use strict';
-
 var AlexaSkill = require('./AlexaSkill');
 var AWS = require("aws-sdk");
-var emitter = require('events');
-var eventEmitter = new emitter.EventEmitter();
-
-var APP_ID = undefined; //replace with 'amzn1.echo-sdk-ams.app.[your-unique-value-here]';
-var personal_id = 0;
+var APP_ID = undefined;
 AWS.config.update({
  region: "us-east-1",
  endpoint: "https://dynamodb.us-east-1.amazonaws.com",
- accessKeyId: "AKIAIL75O2Q6XBUATFSA",
- secretAccessKey: "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"
+ accessKeyId: "",//hidden for security purposes
+ secretAccessKey: ""//hidden for security purposes
 });
 var docClient = new AWS.DynamoDB.DocumentClient();
 
@@ -47,7 +21,7 @@ var FreshBox = function () {
     this.usernumber = 0;
     this.username = "";
 };
-function SessionInitializer(session, callback) {
+function SessionInitializer(session, callback,alert_string) {
   console.log("starting launch application");
   var table = "pantry_users";
   var params = {
@@ -68,7 +42,11 @@ function SessionInitializer(session, callback) {
         if(jsonData.Item.pantry_foods) {//user has foods , store in session attributes
           session.attributes.userFoods = jsonData.Item.pantry_foods;
         }
-        callback(session);
+        if(alert_string) {
+          callback(session,alert_string);
+        } else {
+          callback();
+        }
       } else {//if user not found create a new entry
         //need to insert user into database and update pk, then run as usual
         var params = {
@@ -84,7 +62,11 @@ function SessionInitializer(session, callback) {
             } else {
                 console.log("Added item:", JSON.stringify(data, null, 2));
                 session.attributes.userFoods = [];
-                callback(session);
+                if(alert_string) {
+                  callback(session,alert_string);
+                } else {
+                  callback();
+                }
             }
         });
       }
@@ -144,108 +126,192 @@ function ModifyResponse (itemData, itemName, response, session, callback) {
           response.ask(speechOutput, repromptOutput);
       }
 }
+function check_for_session(session,res_func) {
+  var alert_string;
+  if(!session.attributes.userFoods) {
+    alert_string = "Let me find your information. ";
+    SessionInitializer(session, res_func,alert_string);
+  } else {
+    alert_string = "";
+    res_func(session, alert_string);
+  }
+}
 // Extend AlexaSkill
 FreshBox.prototype = Object.create(AlexaSkill.prototype);
 FreshBox.prototype.constructor = FreshBox;
 FreshBox.prototype.eventHandlers.onLaunch = function (launchRequest, session, response) {
-  var speechText = "Welcome to your pantry";
-  console.log(speechText);
-  var repromptText = "For instructions on what you can say, please say help me.";
-  response.ask(speechText, repromptText);
+  var launch_res = function() {
+    var speechText = "Welcome to your pantry";
+    console.log(speechText);
+    var repromptText = "For instructions on what you can say, please say help me.";
+    response.ask(speechText, repromptText);
+  };
+  if(!session.attributes.userFoods) {
+    SessionInitializer(session,launch_res);
+  } else {
+    launch_res();
+  }
 };
 FreshBox.prototype.eventHandlers.onSessionStarted = function (sessionStartedRequest, session) {//load all user data from database
     console.log("a new session has started");
-
+    //SessionInitializer(session);
 };
 
 FreshBox.prototype.intentHandlers = {
     "QuantityIntent": function (intent, session, response) {
       var itemSlot = intent.slots.Item,
           itemName;
+      var modifierSlot = intent.slots.Modifier,
+          modifier;
       if (itemSlot && itemSlot.value){
           itemName = itemSlot.value.toLowerCase();
       }
-      var findItem = function(session) {
+      if(modifierSlot && modifierSlot.value) {
+        modifier = modifierSlot.value.toLowerCase();
+      }
+      var findItem = function(session,alert_string) {
         var itemData = null;
+        var plural_name = itemName + 's';
         for(var i = 0; i < session.attributes.userFoods.length; i++) {
-          if (session.attributes.userFoods[i].name === itemName) {
-            itemData = "you currently have ";
-            itemData += session.attributes.userFoods[i].quantity + " " + session.attributes.userFoods[i].name;
+          var nxt_item = session.attributes.userFoods[i];
+          if (nxt_item.name === itemName || nxt_item.name === plural_name) {
+            itemData = alert_string + "you currently have ";
+            itemData += nxt_item.quantity
+            itemData += nxt_item.modifier ? (" " + nxt_item.modifier + " of ") : " ";//if modifier, append appropriately
+            itemData += nxt_item.name;
+            if(nxt_item.quantity > 1 && !nxt_item.modifier) {
+              itemData += "s";
+            }
             break;
           }
         }
         ModifyResponse(itemData, itemName, response);
       };
-    if(session.attributes.userFoods) {//user is already in the system
-      findItem(session);
-      //console.log("user data has already been loaded " + session.attributes.user);
-    } else {
-      SessionInitializer(session, findItem);
-    }
+      check_for_session(session,findItem);
   },
+  "AllFoodsIntent": function (intent, session, response) {
+    var findAllItems = function(session,alert_string) {
+      var itemData = alert_string + "You have ";
+      var num_foods = session.attributes.userFoods.length;
+      if(num_foods === 0) {
+        itemData += " no food";
+      }
+      for(var index = 0; index < num_foods; index++) {
+        var nxt_item = session.attributes.userFoods[index];
+        if(index === num_foods - 1 && num_foods > 1) {
+          itemData += " and ";
+        }
+        itemData += nxt_item.quantity
+        itemData += nxt_item.modifier ? (" " + nxt_item.modifier + " of ") : " ";//if modifier, append appropriately
+        itemData += nxt_item.name;
+        if(nxt_item.quantity > 1 && !nxt_item.modifier) {
+          itemData += "s";
+        }
+        if(index < num_foods - 1 && num_foods > 1) {
+          itemData += ",";
+        }
+      }
+      itemData += " in your pantry.";
+      ModifyResponse(itemData, null, response);
+    };
+    check_for_session(session,findAllItems);
+},
   "RemoveIntent": function (intent, session, response) {
       var itemSlot = intent.slots.Item,
           itemName;
       var numberSlot = intent.slots.Number,
           number;
+      var modifierSlot = intent.slots.Modifier,
+          modifier;
       if (itemSlot && itemSlot.value){
-          itemName = itemSlot.value.toLowerCase();
+        itemName = itemSlot.value.toLowerCase();
       }
       if(numberSlot && numberSlot.value) {
         number = numberSlot.value;
       }
-      var removeItem = function(session) {
+      if(modifierSlot && modifierSlot.value) {
+        modifier = modifierSlot.value.toLowerCase();
+      }
+      var removeItem = function(session,alert_string) {
         var itemData = null;
         for(var i = 0; i < session.attributes.userFoods.length; i++) {
-          if (session.attributes.userFoods[i].name === itemName && number) {
-            if(session.attributes.userFoods[i].quantity >=  number) {
-              session.attributes.userFoods[i].quantity -= number;
-              itemData = "you now have " + session.attributes.userFoods[i].quantity + " " + itemName;
+          var plural_name = itemName + 's';
+          var nxt_item = session.attributes.userFoods[i];
+          if ((nxt_item.name === itemName || nxt_item.name === plural_name) && number) {
+            if(nxt_item.quantity >=  Number(number)) {
+              nxt_item.quantity -= Number(number);
+              itemData = alert_string + " you now have ";
+              itemData +=  nxt_item.quantity;
+              itemData += nxt_item.modifier ? (" " + nxt_item.modifier + " of ") : " ";//if modifier, append appropriately
+              itemData += nxt_item.name;
+              if(nxt_item.quantity > 1 && !nxt_item.modifier) {
+                itemData += "s";
+              }
+              console.log('you have ' + nxt_item.quantity + ' and are trying to remove' + number);
             } else {
-              itemData = "you do not have enough " + itemName;
+              console.log('you have ' + nxt_item.quantity + ' and are trying to remove' + number);
+              itemData = alert_string + " you do not have enough " + itemName;
+              if(nxt_item.quantity > 1 && !nxt_item.modifier) {
+                itemData += "s";
+              }
             }
             break;
           }
         }
         ModifyResponse(itemData, itemName, response, session,updateItems);
       };
-      if(session.attributes.userFoods) {//user is already in the system
-        removeItem(session);
-      } else {
-        SessionInitializer(session, removeItem);
-      }
+      check_for_session(session,removeItem);
     },
     "AddIntent": function (intent, session, response) {
         var itemSlot = intent.slots.Item,
             itemName;
         var numberSlot = intent.slots.Number,
             number;
+        var modifierSlot = intent.slots.Modifier,
+            modifier;
         if (itemSlot && itemSlot.value){
-            itemName = itemSlot.value.toLowerCase();
+          itemName = itemSlot.value.toLowerCase();
         }
         if(numberSlot && numberSlot.value) {
           number = numberSlot.value;
         }
-        var addItem = function(session) {
+        if(modifierSlot && modifierSlot.value) {
+          modifier = modifierSlot.value.toLowerCase();
+        }
+        var addItem = function(session,alert_string) {
           var itemData = null;
           for(var i = 0; i < session.attributes.userFoods.length; i++) {
-            if (session.attributes.userFoods[i].name === itemName && number) {
-              session.attributes.userFoods[i].quantity = Number(session.attributes.userFoods[i].quantity) + Number(number);
-              itemData = "you now have " + session.attributes.userFoods[i].quantity + " " + itemName;
+            var nxt_item = session.attributes.userFoods[i];
+            if (nxt_item.name === itemName && number) {
+              nxt_item.quantity = Number(nxt_item.quantity) + Number(number);
+              itemData = alert_string + " you now have ";
+              itemData +=  nxt_item.quantity;
+              itemData += nxt_item.modifier ? (" " + nxt_item.modifier + " of ") : " ";//if modifier, append appropriately
+              itemData += nxt_item.name;
+              if(nxt_item.quantity > 1 && !nxt_item.modifier) {
+                itemData += "s";
+              }
               break;
             }
           }
           if(!itemData && itemName && number) {//user didn't have any of the item, append to sessionAttributes
-            session.attributes.userFoods.push({name:itemName, quantity:number});
-            itemData = "you now have " + number + " " + itemName;
+            itemData = "Creating an entry in your pantry. You now have ";
+            itemData +=  number;
+            itemData += modifier ? (" " + modifier + " of ") : " ";//if modifier, append appropriately
+            itemData += itemName;
+            if(Number(number) > 1 && !modifier) {
+              itemData += "s";
+            }
+            var new_item = {name:itemName, quantity:number};
+            if(modifier) {
+              new_item.modifier = modifier;
+            }
+            session.attributes.userFoods.push(new_item);
           }
+
           ModifyResponse(itemData, itemName, response, session,updateItems);
         };
-        if(session.attributes.userFoods) {//user is already in the system
-          addItem(session);
-        } else {
-          SessionInitializer(session, addItem);
-        }
+        check_for_session(session,addItem);
     },
     "AMAZON.StopIntent": function (intent, session, response) {
         var speechOutput = "Goodbye";
